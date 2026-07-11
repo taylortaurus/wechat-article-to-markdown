@@ -30,10 +30,10 @@ Repository = "https://github.com/jackwener/wechat-article-to-markdown"
 Issues = "https://github.com/jackwener/wechat-article-to-markdown/issues"
 
 [project.scripts]
-wechat-article-to-markdown = "wechat_article_to_markdown:main"
+weixin-spider = "weixin_spider:main"
 
 [tool.setuptools]
-py-modules = ["wechat_article_to_markdown", "main"]
+py-modules = ["weixin_spider"]
 
 [tool.pytest.ini_options]
 markers = [

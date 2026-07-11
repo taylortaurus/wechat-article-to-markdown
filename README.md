@@ -33,14 +33,14 @@ uv sync
 ## Usage
 
 ```bash
-# Installed CLI
-wechat-article-to-markdown "https://mp.weixin.qq.com/s/xxxxxxxx"
+# Installed CLI (via uv tool install / pipx)
+weixin-spider "https://mp.weixin.qq.com/s/xxxxxxxx"
 
-# Run in repo with uv
-uv run wechat-article-to-markdown "https://mp.weixin.qq.com/s/xxxxxxxx"
+# Run in repo with uv (recommended for development)
+uv run weixin-spider "https://mp.weixin.qq.com/s/xxxxxxxx"
 
-# Backward-compatible local entry
-uv run main.py "https://mp.weixin.qq.com/s/xxxxxxxx"
+# Or run the module file directly
+uv run weixin_spider.py "https://mp.weixin.qq.com/s/xxxxxxxx"
 ```
 
 Output structure:
@@ -137,10 +137,25 @@ uv tool install wechat-article-to-markdown
 pipx install wechat-article-to-markdown
 ```
 
+或从源码安装：
+
+```bash
+git clone git@github.com:jackwener/wechat-article-to-markdown.git
+cd wechat-article-to-markdown
+uv sync
+```
+
 ## 使用示例
 
 ```bash
-wechat-article-to-markdown "https://mp.weixin.qq.com/s/xxxxxxxx"
+# 安装后的全局命令（uv tool install / pipx）
+weixin-spider "https://mp.weixin.qq.com/s/xxxxxxxx"
+
+# 在仓库内用 uv 运行（开发推荐）
+uv run weixin-spider "https://mp.weixin.qq.com/s/xxxxxxxx"
+
+# 或直接运行模块文件
+uv run weixin_spider.py "https://mp.weixin.qq.com/s/xxxxxxxx"
 ```
 
 ## 作为 AI Agent Skill 使用

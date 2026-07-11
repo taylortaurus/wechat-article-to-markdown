@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-import wechat_article_to_markdown as wtm
+import weixin_spider as wtm
 
 pytestmark = pytest.mark.e2e
 

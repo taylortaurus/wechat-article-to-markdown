@@ -1,7 +1,7 @@
 import pytest
 from bs4 import BeautifulSoup
 
-from wechat_article_to_markdown import (
+from weixin_spider import (
     convert_to_markdown,
     extract_publish_time,
     format_timestamp,
