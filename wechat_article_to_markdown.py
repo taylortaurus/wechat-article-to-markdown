@@ -34,6 +34,9 @@ from camoufox.async_api import AsyncCamoufox
 DEFAULT_OUTPUT_DIR = Path.cwd() / "output"
 IMAGE_CONCURRENCY = 5
 
+# 哨兵：表示"使用 httpx 默认行为（读取环境变量中的代理）"
+_USE_ENV_PROXY = object()
+
 
 # ============================================================
 # Helpers
@@ -152,16 +155,27 @@ async def download_image(
 
 
 async def download_all_images(
-    img_urls: list[str], img_dir: Path
+    img_urls: list[str], img_dir: Path, proxy=_USE_ENV_PROXY
 ) -> dict[str, str]:
-    """并发下载所有图片，返回 {remote_url: local_path} 映射"""
+    """并发下载所有图片，返回 {remote_url: local_path} 映射
+
+    Args:
+        proxy: 传入 httpx 的代理。默认使用哨兵值 _USE_ENV_PROXY（读取环境变量的代理）；
+               传入 None 表示禁用代理、直接连接。
+    """
     if not img_urls:
         return {}
 
     print(f"🖼  下载 {len(img_urls)} 张图片 (并发 {IMAGE_CONCURRENCY})...")
     semaphore = asyncio.Semaphore(IMAGE_CONCURRENCY)
 
-    async with httpx.AsyncClient() as client:
+    if proxy is _USE_ENV_PROXY:
+        client_cm = httpx.AsyncClient()
+    else:
+        # proxy 为 None 时显式禁用环境代理（直连）
+        client_cm = httpx.AsyncClient(proxy=proxy)
+
+    async with client_cm as client:
         tasks = [
             download_image(client, url, img_dir, i + 1, semaphore)
             for i, url in enumerate(img_urls)
@@ -308,7 +322,9 @@ def build_markdown(meta: dict, body_md: str) -> str:
 # ============================================================
 
 
-async def fetch_article(url: str, output_dir: Path | None = None) -> None:
+async def fetch_article(
+    url: str, output_dir: Path | None = None, no_proxy: bool = True
+) -> None:
     """
     抓取微信公众号文章并转换为 Markdown。
 
@@ -368,7 +384,9 @@ async def fetch_article(url: str, output_dir: Path | None = None) -> None:
     img_dir = article_dir / "images"
     img_dir.mkdir(parents=True, exist_ok=True)
 
-    url_map = await download_all_images(img_urls, img_dir)
+    url_map = await download_all_images(
+        img_urls, img_dir, proxy=None if no_proxy else _USE_ENV_PROXY
+    )
     md = replace_image_urls(md, url_map)
 
     # 写入文件
@@ -392,6 +410,12 @@ def main():
         default=DEFAULT_OUTPUT_DIR,
         help=f"输出目录 (默认: {DEFAULT_OUTPUT_DIR})",
     )
+    parser.add_argument(
+        "--proxy",
+        action="store_true",
+        default=False,
+        help="图片下载走环境代理（默认直连，忽略 ALL_PROXY/HTTPS_PROXY 等环境变量）",
+    )
 
     args = parser.parse_args()
     raw_url = args.url
@@ -405,7 +429,9 @@ def main():
         sys.exit(1)
 
     try:
-        asyncio.run(fetch_article(url, output_dir=args.output))
+        asyncio.run(
+            fetch_article(url, output_dir=args.output, no_proxy=not args.proxy)
+        )
     except Exception as e:
         print(f"❌ 抓取失败: {e}")
         sys.exit(1)

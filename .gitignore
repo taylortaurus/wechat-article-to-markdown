@@ -5,3 +5,9 @@ debug.html
 __pycache__/
 *.pyc
 .venv/
+
+# Packaging / build artifacts
+*.egg-info/
+
+# IDE
+.idea/
