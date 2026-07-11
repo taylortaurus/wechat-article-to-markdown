@@ -11,3 +11,6 @@ __pycache__/
 
 # IDE
 .idea/
+
+# User crawl list (contains per-URL crawl state)
+url-list.json

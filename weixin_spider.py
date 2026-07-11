@@ -20,8 +20,10 @@ WeChat Article to Markdown — 微信公众号文章抓取 & Markdown 转换工�
 import argparse
 import asyncio
 import html as html_mod
+import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
@@ -33,6 +35,8 @@ from camoufox.async_api import AsyncCamoufox
 # Default output directory (current working directory / output)
 DEFAULT_OUTPUT_DIR = Path.cwd() / "output"
 IMAGE_CONCURRENCY = 5
+# 列表模式默认读取的 JSON 文件（位于当前工作目录）
+DEFAULT_LIST_FILE = Path.cwd() / "url-list.json"
 
 # 哨兵：表示"使用 httpx 默认行为（读取环境变量中的代理）"
 _USE_ENV_PROXY = object()
@@ -324,13 +328,16 @@ def build_markdown(meta: dict, body_md: str) -> str:
 
 async def fetch_article(
     url: str, output_dir: Path | None = None, no_proxy: bool = True
-) -> None:
+) -> Path:
     """
     抓取微信公众号文章并转换为 Markdown。
 
     Args:
         url: 微信文章 URL
         output_dir: 输出目录，默认为 DEFAULT_OUTPUT_DIR
+
+    Returns:
+        生成的 Markdown 文件绝对路径
     """
     if output_dir is None:
         output_dir = DEFAULT_OUTPUT_DIR
@@ -357,12 +364,13 @@ async def fetch_article(
     # 提取元数据
     meta = extract_metadata(soup, html)
     if not meta["title"]:
-        print("❌ 未能提取到文章标题，可能触发了验证码")
         output_dir.mkdir(parents=True, exist_ok=True)
         debug_path = output_dir / "debug.html"
         debug_path.write_text(html, encoding="utf-8")
-        print(f"已保存原始 HTML 到 {debug_path}")
-        sys.exit(1)
+        raise RuntimeError(
+            "未能提取到文章标题，可能触发了验证码；已保存原始 HTML 到 "
+            f"{debug_path}"
+        )
 
     meta["source_url"] = url
     print(f"📄 标题: {meta['title']}")
@@ -372,8 +380,7 @@ async def fetch_article(
     # 处理正文
     content_html, code_blocks, img_urls = process_content(soup)
     if not content_html:
-        print("❌ 未能提取到正文内容")
-        sys.exit(1)
+        raise RuntimeError("未能提取到正文内容")
 
     # 转 Markdown
     md = convert_to_markdown(content_html, code_blocks)
@@ -396,19 +403,161 @@ async def fetch_article(
 
     print(f"✅ 已保存: {md_path}")
     print(f"📊 Markdown 约 {len(md)} 字符")
+    return md_path
+
+
+def load_url_list(path: Path) -> list[dict]:
+    """读取 url-list.json，归一化为 [{url, status?, output?, updated_at?, error?}, ...]"""
+    if not path.exists():
+        raise FileNotFoundError(
+            f"未找到列表文件: {path}\n"
+            f"请创建该文件并填入 URL（见 README），或改用 `weixin-spider \"<url>\"` 单条抓取。"
+        )
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"{path} 不是合法 JSON: {e}")
+
+    if isinstance(data, dict) and "urls" in data:
+        raw = data["urls"]
+    elif isinstance(data, list):
+        raw = data
+    else:
+        raise ValueError(f"{path} 顶层应为数组，或含 'urls' 字段的对象")
+
+    items: list[dict] = []
+    for entry in raw:
+        if isinstance(entry, str):
+            items.append({"url": entry})
+        elif isinstance(entry, dict) and entry.get("url"):
+            items.append(entry)
+        else:
+            print(f"  ⚠️ 跳过无效条目: {entry!r}")
+    return items
+
+
+def save_url_list(path: Path, items: list[dict]) -> None:
+    """将列表（含爬取结果）写回 JSON 文件"""
+    path.write_text(
+        json.dumps(items, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _now() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _article_key(url: str) -> str:
+    """提取微信文章的去重键：去掉查询串/锚点，仅保留核心路径（/s/xxx）。
+
+    这样带 chksm/scene 等追踪参数的链接与纯净链接会被识别为同一篇文章，
+    避免重复爬取。
+    """
+    return normalize_wechat_url(url).split("?")[0].split("#")[0].rstrip("/")
+
+
+async def crawl_from_list(
+    list_path: Path, output_dir: Path, no_proxy: bool
+) -> None:
+    """按 url-list.json 遍历爬取，已 done 的跳过，结果回写文件以支持续爬。
+
+    同时做去重：同一篇文章（即使链接带不同追踪参数）只爬一次。
+    """
+    items = load_url_list(list_path)
+    if not items:
+        print("📋 列表为空，没有待爬取的 URL。")
+        return
+
+    cwd = Path.cwd()
+    total = len(items)
+    done = skipped = failed = 0
+    seen: set[str] = set()  # 本轮已处理过的文章去重键
+
+    for idx, item in enumerate(items, 1):
+        url = item.get("url", "")
+        if not url:
+            continue
+
+        key = _article_key(url)
+        if key in seen:
+            print(f"⏭️  [{idx}/{total}] 重复 URL，跳过: {url}")
+            skipped += 1
+            continue
+
+        if item.get("status") == "done":
+            print(f"⏭️  [{idx}/{total}] 已爬取，跳过: {url}")
+            skipped += 1
+            seen.add(key)
+            continue
+
+        norm = normalize_wechat_url(url)
+        if norm != url:
+            print("ℹ️  已自动清理 URL 中的转义字符 / HTML 实体。")
+        if not norm.startswith("https://mp.weixin.qq.com/"):
+            print(f"  ❌ 无效的微信文章 URL，跳过: {url}")
+            item["status"] = "failed"
+            item["error"] = "无效的微信文章 URL (mp.weixin.qq.com)"
+            item["updated_at"] = _now()
+            failed += 1
+            seen.add(key)
+            save_url_list(list_path, items)
+            continue
+
+        print(f"🔜  [{idx}/{total}] 开始: {norm}")
+        try:
+            md_path = await fetch_article(
+                norm, output_dir=output_dir, no_proxy=no_proxy
+            )
+            try:
+                rel = md_path.relative_to(cwd)
+            except ValueError:
+                rel = md_path
+            item["status"] = "done"
+            item["output"] = str(rel)
+            item["updated_at"] = _now()
+            item.pop("error", None)
+            done += 1
+        except Exception as e:
+            print(f"  ❌ 抓取失败: {e}")
+            item["status"] = "failed"
+            item["error"] = str(e)
+            item["updated_at"] = _now()
+            failed += 1
+
+        seen.add(key)
+        # 每条处理后写回，保证中断也能续爬
+        save_url_list(list_path, items)
+
+    print(
+        f"\n🏁 完成：成功 {done} / 跳过 {skipped} / 失败 {failed}（共 {total}）"
+    )
+    if failed:
+        sys.exit(1)
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="微信公众号文章抓取 & Markdown 转换工具"
     )
-    parser.add_argument("url", help="微信公众号文章 URL")
+    parser.add_argument(
+        "url",
+        nargs="?",
+        default=None,
+        help="单个微信文章 URL；留空则按 --list 指定的 JSON 列表遍历爬取",
+    )
     parser.add_argument(
         "-o",
         "--output",
         type=Path,
         default=DEFAULT_OUTPUT_DIR,
         help=f"输出目录 (默认: {DEFAULT_OUTPUT_DIR})",
+    )
+    parser.add_argument(
+        "--list",
+        type=Path,
+        default=DEFAULT_LIST_FILE,
+        help=f"待爬取 URL 列表 JSON (默认: {DEFAULT_LIST_FILE})",
     )
     parser.add_argument(
         "--proxy",
@@ -418,22 +567,34 @@ def main():
     )
 
     args = parser.parse_args()
-    raw_url = args.url
-    url = normalize_wechat_url(raw_url)
-    if url != raw_url:
-        print("ℹ️  已自动清理 URL 中的转义字符 / HTML 实体。")
+    no_proxy = not args.proxy
 
-    if not url.startswith("https://mp.weixin.qq.com/"):
-        print("❌ 请输入有效的微信文章 URL (mp.weixin.qq.com)")
-        print("提示：请用引号包住完整 URL；若粘贴后出现反斜杠转义，脚本会自动清理。")
-        sys.exit(1)
+    # 单条模式
+    if args.url:
+        raw_url = args.url
+        url = normalize_wechat_url(raw_url)
+        if url != raw_url:
+            print("ℹ️  已自动清理 URL 中的转义字符 / HTML 实体。")
+        if not url.startswith("https://mp.weixin.qq.com/"):
+            print("❌ 请输入有效的微信文章 URL (mp.weixin.qq.com)")
+            print("提示：请用引号包住完整 URL；若粘贴后出现反斜杠转义，脚本会自动清理。")
+            sys.exit(1)
+        try:
+            asyncio.run(
+                fetch_article(url, output_dir=args.output, no_proxy=no_proxy)
+            )
+        except Exception as e:
+            print(f"❌ 抓取失败: {e}")
+            sys.exit(1)
+        return
 
+    # 列表模式
     try:
         asyncio.run(
-            fetch_article(url, output_dir=args.output, no_proxy=not args.proxy)
+            crawl_from_list(args.list, output_dir=args.output, no_proxy=no_proxy)
         )
-    except Exception as e:
-        print(f"❌ 抓取失败: {e}")
+    except (FileNotFoundError, ValueError) as e:
+        print(f"❌ {e}")
         sys.exit(1)
 
 

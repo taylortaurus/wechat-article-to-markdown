@@ -43,6 +43,48 @@ uv run weixin-spider "https://mp.weixin.qq.com/s/xxxxxxxx"
 uv run weixin_spider.py "https://mp.weixin.qq.com/s/xxxxxxxx"
 ```
 
+> **Naming note:** the runnable file is `weixin_spider.py` (underscore — a valid
+> Python module name), while the installed command is `weixin-spider` (hyphen —
+> the shell command). The mapping is declared in `pyproject.toml`:
+> `weixin-spider = "weixin_spider:main"`. With `uv run`:
+> - `uv run weixin-spider` → resolves to the installed console script;
+> - `uv run weixin_spider.py` → runs the file directly;
+> - `uv run weixin_spider` (no `.py`, underscore) → matches neither and fails.
+
+### Batch mode with `url-list.json`
+
+Instead of passing a URL each time, put all target URLs in a JSON list and run
+a single fixed command. Crawled entries are marked and skipped on the next run.
+
+```json
+[
+  "https://mp.weixin.qq.com/s/xxxxxxxx",
+  {
+    "url": "https://mp.weixin.qq.com/s/yyyyyyyy",
+    "status": "done",
+    "output": "output/<title>/<title>.md",
+    "updated_at": "2026-07-11 12:00:00"
+  }
+]
+```
+
+- A bare string `"https://..."` is treated as a pending URL.
+- An object with `status: "done"` is **skipped** on subsequent runs.
+- After each crawl the file is rewritten with `status`, `output` (relative
+  path) and `updated_at`, so progress survives interruptions (resume).
+- **Deduplication**: the article is keyed by its core path (`/s/xxx`, with
+  tracking params like `?chksm=...&scene=...` and anchors stripped). The same
+  article—even with different tracking parameters or listed twice—is crawled
+  only once; extra occurrences print `⏭️ 重复 URL，跳过` and are skipped.
+
+```bash
+# Default file: ./url-list.json
+uv run weixin-spider
+
+# Or specify a file
+uv run weixin-spider --list my-urls.json
+```
+
 Output structure:
 
 ```text
@@ -156,6 +198,42 @@ uv run weixin-spider "https://mp.weixin.qq.com/s/xxxxxxxx"
 
 # 或直接运行模块文件
 uv run weixin_spider.py "https://mp.weixin.qq.com/s/xxxxxxxx"
+```
+
+> **命名说明：** 可运行文件名为 `weixin_spider.py`（下划线，符合 Python 模块命名），
+> 而安装的命令名为 `weixin-spider`（连字符，终端命令）。两者在 `pyproject.toml`
+> 中通过 `weixin-spider = "weixin_spider:main"` 关联。使用 `uv run` 时：
+> - `uv run weixin-spider` → 解析为已安装的 console 脚本；
+> - `uv run weixin_spider.py` → 直接运行文件；
+> - `uv run weixin_spider`（无 `.py`、下划线）→ 两者都不匹配，会报错。
+
+### 批量模式（url-list.json）
+
+无需每次传 URL，把目标链接写进 JSON 列表，跑一条固定命令即可。已爬取的条目会被标记，下次运行自动跳过。
+
+```json
+[
+  "https://mp.weixin.qq.com/s/xxxxxxxx",
+  {
+    "url": "https://mp.weixin.qq.com/s/yyyyyyyy",
+    "status": "done",
+    "output": "output/<标题>/<标题>.md",
+    "updated_at": "2026-07-11 12:00:00"
+  }
+]
+```
+
+- 直接写字符串 `"https://..."` 视为待爬取；
+- 带 `status: "done"` 的对象下次运行会**跳过**；
+- 每条爬取后文件会被回写 `status`、`output`（相对路径）、`updated_at`，中断也可续爬。
+- **去重**：以文章核心路径（`/s/xxx`，去掉 `?chksm=...&scene=...` 等追踪参数与锚点）作为去重键。同一篇文章即使链接带不同追踪参数、或在列表里写了多次，也只会爬一次；多余的会打印 `⏭️ 重复 URL，跳过` 并跳过。
+
+```bash
+# 默认文件：./url-list.json
+uv run weixin-spider
+
+# 或指定文件
+uv run weixin-spider --list my-urls.json
 ```
 
 ## 作为 AI Agent Skill 使用
