@@ -1,96 +1,86 @@
 ---
-name: wechat-article-to-markdown
-description: Fetch WeChat Official Account (微信公众号) articles from mp.weixin.qq.com and convert to Markdown. Supports single-URL and batch (url-list.json) modes with resume and deduplication. 微信文章转 Markdown 工具（支持单条与批量续爬、去重）。
+name: spider-claw
+description: Multi-source article fetcher that converts web articles (WeChat, blogs, Twitter, ...) to Markdown. Routes by URL or --source; supports sitemap bulk-crawl. 多源文章转 Markdown 工具（微信与博客已实现，Twitter 占位，支持站点地图批量爬取）。
 author: jackwener
-version: "1.0.0"
+version: "2.0.0"
 tags:
   - wechat
+  - twitter
+  - blog
   - 微信
-  - 微信文章
-  - 公众号
-  - mp.weixin.qq.com
+  - 推特
+  - 博客
   - markdown
   - article
   - converter
   - cli
   - batch
   - resume
+  - spider-claw
 ---
 
-# WeChat Article to Markdown
+# spider-claw
 
-Fetch WeChat Official Account articles from `mp.weixin.qq.com` and convert them to
-clean Markdown, with images localized to local files.
+Fetch articles from multiple sources and convert them to clean Markdown, with
+images localized to local files. **WeChat (`mp.weixin.qq.com`) and blogs
+(registered domains, e.g. `addyosmani.com`) are fully implemented**; Twitter is a
+registered stub (not yet implemented).
 
 ## When to use
 
-Use this skill when you need to save WeChat articles as Markdown for:
+Use this skill (or a per-source skill under [`skills/`](./skills)) when you need to
+save web articles as Markdown for:
 - Personal archive
 - AI summarization input
-- Knowledge base ingestion
+- Knowledge base / RAG ingestion
 - Batch archiving a list of articles (resume-safe)
+
+## Per-source skills
+
+- [`skills/wechat-to-markdown/`](./skills/wechat-to-markdown) — full WeChat support
+- [`skills/blog-to-markdown/`](./skills/blog-to-markdown) — full blog support (sitemap bulk-crawl)
+- [`skills/twitter-to-markdown/`](./skills/twitter-to-markdown) — stub (not implemented)
+
+For most tasks, invoke the specific source skill directly; this root skill is the
+router/entry point.
 
 ## Prerequisites
 
 - Python 3.8+ and [`uv`](https://github.com/astral-sh/uv)
-- Camoufox (anti-detection browser) — its browser binary is fetched automatically on first run
+- Camoufox (anti-detection browser) — its browser binary is fetched automatically on first run (WeChat)
 
 ```bash
 # Run directly with uv (no install needed) from the project root:
-uv run weixin-spider "<WECHAT_ARTICLE_URL>"
+uv run spider-claw "<ARTICLE_URL>"
 
 # Or install the CLI globally:
-uv tool install wechat-article-to-markdown
-weixin-spider "<WECHAT_ARTICLE_URL>"
+uv tool install spider-claw
+spider-claw "<ARTICLE_URL>"
 ```
-
-> Note: the command is `weixin-spider` (hyphen), while the source module is
-> `weixin_spider.py` (underscore) — this follows Python packaging conventions.
 
 ## Usage
 
-### Single article
+### Single article (source auto-detected, or forced)
 
 ```bash
-weixin-spider "https://mp.weixin.qq.com/s/XXXXXXXX"
+spider-claw "https://mp.weixin.qq.com/s/XXXXXXXX"
+spider-claw --source wechat "https://mp.weixin.qq.com/s/XXXXXXXX"
+spider-claw "https://addyosmani.com/blog/career-advice-age-of-agents/"   # blog (auto-detected)
+spider-claw --source blog "https://example.com/any/post"                 # any URL (readability fallback)
+spider-claw --source twitter "https://twitter.com/xxx/status/123"   # stub → not implemented
 ```
 
 ### Batch mode (url-list.json)
 
-Put target URLs in `url-list.json` (array of strings or objects) and run a single
-fixed command. Crawled entries are marked and skipped on the next run; the same
-article is never crawled twice.
-
 ```bash
-# Default file: ./url-list.json
-uv run weixin-spider
-
-# Or specify a file
-uv run weixin-spider --list my-urls.json
+uv run spider-claw                # default: ./url-list.json
+uv run spider-claw --list my-urls.json
 ```
 
-`url-list.json` format:
-
-```json
-[
-  "https://mp.weixin.qq.com/s/xxxxxxxx",
-  {
-    "url": "https://mp.weixin.qq.com/s/yyyyyyyy",
-    "status": "done",
-    "output": "output/<title>/<title>.md",
-    "updated_at": "2026-07-11 12:00:00"
-  }
-]
-```
-
-- A bare string `"https://..."` is treated as a pending URL.
-- An object with `status: "done"` is skipped on subsequent runs.
-- After each crawl the file is rewritten with `status`, `output` (relative path) and
-  `updated_at`, so progress survives interruptions (resume).
-- Deduplication: the article is keyed by its core path (`/s/xxx`, with tracking
-  params like `?chksm=...&scene=...` and anchors stripped). The same article — even
-  with different tracking parameters or listed twice — is crawled only once; extra
-  occurrences print `⏭️ 重复 URL，跳过` and are skipped.
+Each entry is a string or an object. Objects may carry `source` (defaults to
+auto-detect → `wechat`), and after a crawl get `status`, `output`, `updated_at`
+written back. Dedup key is `(source, article_id)`, so the same article (even with
+different tracking params, or listed twice) is crawled only once.
 
 ## Options
 
@@ -98,28 +88,24 @@ uv run weixin-spider --list my-urls.json
 | --- | --- | --- |
 | `-o, --output DIR` | `./output` | Output directory |
 | `--list FILE` | `./url-list.json` | URL list for batch mode |
-| `--proxy` | off (direct) | Route image downloads through the environment proxy (`ALL_PROXY`/`HTTPS_PROXY`). Default is direct connection, ignoring proxy env vars. |
+| `--source NAME` | auto | Force a source (`wechat`/`twitter`/`blog`), overriding URL detection |
+| `--from-sitemap URL` | — | Discover blog posts from a sitemap, append to `url-list.json`, and crawl (resume-safe) |
+| `--proxy` | off (direct) | Route image downloads through the environment proxy |
 
 ## Output
 
 - `<output>/<article-title>/<article-title>.md`
 - `<output>/<article-title>/images/*`
 
-The Markdown head includes the title, account name, publish time and source URL.
-
 ## Features
 
-1. Anti-detection fetch with Camoufox
-2. Metadata extraction (title, account name, publish time, source URL)
-3. Image localization to local files
-4. WeChat code-snippet extraction and fenced code block output
-5. HTML to Markdown conversion via markdownify
-6. Concurrent image downloading
-7. Batch mode with resume and deduplication (`url-list.json`)
+1. Multi-source router (URL auto-detect + `--source`)
+2. WeChat: anti-detection fetch via Camoufox, metadata extraction, image localization, code-snippet handling, markdownify
+3. Blogs: data-driven `BlogSiteConfig` per site (addyosmani.com out of the box), readability fallback for unknown domains, sitemap bulk-crawl via `--from-sitemap`
+4. Batch mode with resume and per-source deduplication
 
 ## Limitations
 
+- Twitter is not implemented yet (stub raises `NotImplementedError`)
 - Some code snippets are image/SVG rendered and cannot be extracted as source code
-- A public `mp.weixin.qq.com` article URL is required
-- Camoufox may trigger a WeChat CAPTCHA on aggressive use; the raw HTML is saved to
-  `debug.html` for inspection
+- Camoufox may trigger a WeChat CAPTCHA on aggressive use; the raw HTML is saved to `debug.html`

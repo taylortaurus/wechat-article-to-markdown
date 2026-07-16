@@ -1,13 +1,12 @@
 import pytest
 from bs4 import BeautifulSoup
 
-from weixin_spider import (
-    convert_to_markdown,
+from spider_claw.core.markdownify_ import convert_to_markdown, replace_image_urls
+from spider_claw.sources.wechat import (
     extract_publish_time,
     format_timestamp,
     normalize_wechat_url,
     process_content,
-    replace_image_urls,
 )
 
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-import weixin_spider as wtm
+from spider_claw.sources import wechat as wtm
 
 pytestmark = pytest.mark.e2e
 

@@ -3,9 +3,9 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "wechat-article-to-markdown"
+name = "spider-claw"
 version = "0.1.0"
-description = "Fetch WeChat Official Account articles and convert them to Markdown"
+description = "Multi-source article fetcher (WeChat, blogs, …) that converts web articles to clean Markdown"
 readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"
@@ -17,8 +17,9 @@ dependencies = [
   "markdownify",
   "beautifulsoup4",
   "httpx[socks]",
+  "readability-lxml",
 ]
-keywords = ["wechat", "markdown", "crawler", "camoufox"]
+keywords = ["wechat", "blog", "markdown", "crawler", "camoufox", "sitemap"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
@@ -30,10 +31,10 @@ Repository = "https://github.com/jackwener/wechat-article-to-markdown"
 Issues = "https://github.com/jackwener/wechat-article-to-markdown/issues"
 
 [project.scripts]
-weixin-spider = "weixin_spider:main"
+spider-claw = "spider_claw:main"
 
 [tool.setuptools]
-py-modules = ["weixin_spider"]
+packages = ["spider_claw", "spider_claw.core", "spider_claw.sources"]
 
 [tool.pytest.ini_options]
 markers = [
