@@ -21,10 +21,10 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urljoin, urlparse, urlunparse
 
-import httpx
 from bs4 import BeautifulSoup
 
 from .base import Source
+from ..core.http import sync_client
 from ..core.images import _USE_ENV_PROXY, download_all_images
 from ..core.markdownify_ import build_markdown, convert_to_markdown, replace_image_urls
 
@@ -108,7 +108,8 @@ def _http_get(url: str, referer: str | None = None, timeout: int = 20) -> str:
     headers = {"User-Agent": UA}
     if referer:
         headers["Referer"] = referer
-    r = httpx.get(url, follow_redirects=True, timeout=timeout, headers=headers)
+    with sync_client() as client:
+        r = client.get(url, follow_redirects=True, timeout=timeout, headers=headers)
     r.raise_for_status()
     return r.text
 

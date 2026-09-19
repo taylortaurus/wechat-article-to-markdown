@@ -147,8 +147,21 @@ md = replace_image_urls(md, url_map)
 
 - 并发下载（信号量限流），按序命名 `img_001.png` 等；
 - 扩展名从 `wx_fmt` 参数或 URL 推断；
-- `--proxy` 控制是否走环境代理（默认直连）；
+- `--proxy` 控制是否走环境代理（默认直连，连 `*_PROXY` 环境变量也一并忽略）；
 - 下载后把 MD 中的远程图链精确替换为本地相对路径。
+
+### 代理与环境变量（踩坑记录）
+
+HTTP 客户端统一由 `spider_claw/core/http.py` 的 `async_client` / `sync_client` 构造：
+
+- `proxy=None`（默认）→ `trust_env=False`，真正直连，不读任何环境变量；
+- `proxy=_USE_ENV_PROXY`（`--proxy`）→ 读环境变量，先净化 `NO_PROXY`，仍解析失败则
+  告警并降级为直连，不中断抓取。
+
+原因：httpx 在**构造 Client 时**就把 `NO_PROXY` 转成 mount 规则，
+`NO_PROXY` 中的 IPv6 CIDR（如 `::1/128`）会生成 `all://[::1/128]`，
+解析时抛 `InvalidURL("Invalid port: ':1'")` —— 且 `httpx.Client(proxy=None)`
+同样会读环境变量，因此连"直连"模式都会在建客户端时崩掉。
 
 ## 8. 反检测与验证码兜底
 

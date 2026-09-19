@@ -4,13 +4,14 @@ from __future__ import annotations
 import asyncio
 import re
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
-import httpx
+from .http import _USE_ENV_PROXY, async_client
 
 IMAGE_CONCURRENCY = 5
 # 哨兵：表示"使用 httpx 默认行为（读取环境变量中的代理）"
-_USE_ENV_PROXY = object()
+# （定义在 core/http.py，此处再导出以保持既有导入路径可用）
+__all__ = ["_USE_ENV_PROXY", "download_all_images", "download_image"]
 
 
 def _resolve_img_url(img_url: str, article_url: str | None) -> str:
@@ -76,7 +77,7 @@ async def download_all_images(
 
     Args:
         proxy: 传入 httpx 的代理。默认使用哨兵值 _USE_ENV_PROXY（读取环境变量的代理）；
-               传入 None 表示禁用代理、直接连接。
+               传入 None 表示禁用代理、直接连接（连环境变量里的 *_PROXY 也一并忽略）。
         referer: 图片请求携带的 Referer（部分站点防盗链需要）；None 表示不携带。
         article_url: 文章原始 URL，用于将相对路径图片解析为绝对 URL。
     """
@@ -86,11 +87,7 @@ async def download_all_images(
     print(f"🖼  下载 {len(img_urls)} 张图片 (并发 {IMAGE_CONCURRENCY})...")
     semaphore = asyncio.Semaphore(IMAGE_CONCURRENCY)
 
-    if proxy is _USE_ENV_PROXY:
-        client_cm = httpx.AsyncClient()
-    else:
-        # proxy 为 None 时显式禁用环境代理（直连）
-        client_cm = httpx.AsyncClient(proxy=proxy)
+    client_cm = async_client(proxy)
 
     async with client_cm as client:
         tasks = [
