@@ -14,3 +14,4 @@ __pycache__/
 
 # User crawl list (contains per-URL crawl state)
 url-list.json
+.workbuddy/
