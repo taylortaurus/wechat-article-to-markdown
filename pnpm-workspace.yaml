@@ -1,0 +1,7 @@
+# pnpm 默认拦截依赖的 install / postinstall 脚本，这里显式放行本项目确实需要的构建项：
+#   - esbuild：tsup 的打包器，需要落地平台可执行文件
+#   - better-sqlite3：camoufox-js 的原生依赖（指纹缓存），需要下载/校验预编译产物
+# 其余依赖不需要跑脚本（不要放宽成"允许全部"，以免引入供应链风险）。
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true

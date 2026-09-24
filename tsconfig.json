@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "types": ["node"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    // tsup 的 dts 构建内部仍会注入已废弃的 baseUrl（TS 6 起报错），这里显式静默
+    "ignoreDeprecations": "6.0",
+
+    "noEmit": true,
+    "outDir": "dist"
+  },
+  "include": ["src", "tests", "tsup.config.ts", "vitest.config.ts"]
+}

@@ -1,0 +1,65 @@
+{
+  "name": "spider-claw",
+  "version": "3.0.0",
+  "description": "Multi-source article fetcher (WeChat, blogs, …) that converts web articles to clean Markdown",
+  "license": "MIT",
+  "author": "jackwener",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "spider-claw": "dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "tsx src/bin.ts",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run tests/unit",
+    "test:watch": "vitest tests/unit",
+    "test:e2e": "vitest run tests/e2e",
+    "probe:mp": "tsx scripts/probe/wechat-mp-probe.ts"
+  },
+  "keywords": [
+    "wechat",
+    "blog",
+    "markdown",
+    "crawler",
+    "camoufox",
+    "sitemap",
+    "cli",
+    "typescript"
+  ],
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "camoufox-js": "^0.12.0",
+    "cheerio": "^1.2.0",
+    "commander": "^15.0.0",
+    "domhandler": "^5.0.3",
+    "jsdom": "^27.4.0",
+    "playwright-core": "1.60.0",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2",
+    "undici": "^8.10.2"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^30.0.0",
+    "@types/node": "^24.0.0",
+    "@types/turndown": "^5.0.6",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.13",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.1"
+  }
+}
