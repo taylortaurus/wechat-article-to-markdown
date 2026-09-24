@@ -17,15 +17,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 微信来源依赖 Camoufox 浏览器二进制，首次运行需下载（用户级缓存目录）
+      - name: Fetch Camoufox browser
+        run: npx camoufox-js fetch
 
       - name: Run live e2e tests
         env:
           WECHAT_E2E_URLS: ${{ github.event.inputs.urls }}
           WECHAT_E2E_TIMEOUT: ${{ github.event.inputs.timeout }}
-        run: uv run --with pytest pytest -q -m e2e -s
+        run: pnpm test:e2e

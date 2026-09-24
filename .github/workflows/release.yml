@@ -14,37 +14,59 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Fetch Camoufox browser
+        run: npx camoufox-js fetch
 
       - name: Run release e2e tests
         env:
           WECHAT_E2E_URLS: ${{ vars.RELEASE_E2E_URLS != '' && vars.RELEASE_E2E_URLS || 'https://mp.weixin.qq.com/s/Y7dyRC7CJ09miHWU6LBzBA' }}
           WECHAT_E2E_TIMEOUT: "300"
-        run: uv run --with pytest pytest -q -m e2e -s
+        run: pnpm test:e2e
 
   publish:
     needs: [verify, e2e]
     runs-on: ubuntu-latest
-    environment: pypi
+    environment: npm
     permissions:
       id-token: write
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: uv build
+        run: pnpm build
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --generate-notes

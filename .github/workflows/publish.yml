@@ -1,4 +1,4 @@
-name: Publish to PyPI
+name: Publish to npm
 
 on:
   workflow_dispatch:
@@ -10,21 +10,29 @@ jobs:
   publish:
     needs: verify
     runs-on: ubuntu-latest
-    environment: pypi
+    environment: npm
     permissions:
-      id-token: write
+      id-token: write # npm trusted publishing（OIDC）+ provenance
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: uv build
+        run: pnpm build
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish to npm
+        run: npm publish --provenance --access public

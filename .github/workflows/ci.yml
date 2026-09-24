@@ -12,15 +12,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - uses: pnpm/action-setup@v4
         with:
-          python-version: "3.12"
+          version: 11.4.0
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
 
-      - name: Build package
-        run: uv build
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - name: Run tests
-        run: uv run --with pytest pytest -q -m "not e2e"
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: Run unit tests
+        run: pnpm test
