@@ -1,0 +1,8 @@
+# dsh 组合包的 patch 层：把一个插件行插进宿主组合。
+#
+# 按官方约定，这里的 `name` 用**包名**（不是路径），这样 Node 的模块解析才能找到
+# 已安装的代码。开发期用 `dsh plugin add ./packages/dsh-wechat-mp` 把它 link 进 profile，
+# 宿主就会读到这份 patch。
+- insert:
+    - id: wechat-mp
+      name: dsh-wechat-mp

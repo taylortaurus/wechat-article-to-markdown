@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "types": ["node"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    "noEmit": true,
+    "outDir": "lib",
+
+    // 开发期的模块解析映射。
+    //
+    // `@deepseek-ai/*` 这些包在**运行时由宿主提供**（已声明为 peerDependencies），
+    // 但本机环境拿不到它们的类型声明，所以由 `src/dsh-shim.d.ts` 用环境声明补上。
+    // 等这些包可以从 npm 正常安装时，删掉 shim、改用真实依赖即可，源码不用动。
+    //
+    // `spider-claw` 是同一个仓库里的兄弟包：**类型走它构建好的声明**（`dist/index.d.ts`），
+    // 运行时不映射（`file:../..` 的依赖会解析到真实包）。
+    // 这样做同时避免把父包的源码拉进本包的程序里 —— 那会让 TS 推断出错误的 rootDir。
+    "paths": {
+      "spider-claw": ["../../dist/index.d.ts"]
+    }
+  },
+  "include": ["src", "tests"]
+}
