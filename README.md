@@ -2,26 +2,41 @@
 
 Multi-source article fetcher that converts web articles (WeChat, blogs, Twitter, …) to clean Markdown. WeChat and blogs are implemented; Twitter is a registered stub.
 
+> **TypeScript rewrite.** The project was refactored from Python to a TypeScript/Node.js
+> stack on branch `dev-dsh-spider-claw`; the previous Python implementation is archived
+> under [`legacy/python/`](./legacy/python). See the
+> [重构报告](./docs/typescript-refactor-report.md) for the module-by-module mapping,
+> behaviour parity checks and the intentional deviations.
+
 [English](#features) | [中文](#功能特性)
 
 ## Features
 
 - **Multi-source router**: auto-detect source from URL, or force with `--source`
-- Anti-detection fetching with Camoufox (WeChat)
+- Anti-detection fetching with [Camoufox](https://camoufox.com/) (WeChat)
 - Extract article metadata (title, account name, publish time, source URL)
 - Convert article HTML to Markdown
 - Download article images to local `images/` and rewrite links
 - Handle WeChat `code-snippet` blocks with language fences
 - Batch mode with resume and per-source deduplication (`url-list.json`)
 
+## Requirements
+
+- **Node.js ≥ 22** (uses native `fetch` + `AbortSignal.timeout`)
+- For the **WeChat** source only: the Camoufox browser binary, fetched once with
+  `npx camoufox-js fetch`
+
 ## Installation
 
 ```bash
-# Recommended: uv tool (fast, isolated)
-uv tool install spider-claw
+# Recommended: install the CLI globally
+npm install -g spider-claw
 
-# Or: pipx
-pipx install spider-claw
+# Or run without installing
+npx spider-claw "https://mp.weixin.qq.com/s/xxxxxxxx"
+
+# WeChat source needs the anti-detection browser binary once
+npx camoufox-js fetch
 ```
 
 Or from source:
@@ -29,28 +44,25 @@ Or from source:
 ```bash
 git clone git@github.com:jackwener/wechat-article-to-markdown.git
 cd wechat-article-to-markdown
-uv sync
+pnpm install
+pnpm build        # produces dist/ (dist/cli.js is the `spider-claw` binary)
 ```
 
 ## Usage
 
 ```bash
-# Installed CLI (via uv tool install / pipx)
+# Installed CLI
 spider-claw "https://mp.weixin.qq.com/s/xxxxxxxx"
 
-# Run in repo with uv (recommended for development)
-uv run spider-claw "https://mp.weixin.qq.com/s/xxxxxxxx"
+# From a source checkout (no build step, runs TypeScript directly)
+pnpm dev "https://mp.weixin.qq.com/s/xxxxxxxx"
 
-# Or run through the package explicitly
-uv run python -m spider_claw "https://mp.weixin.qq.com/s/xxxxxxxx"
+# Or the built artifact
+node dist/cli.js "https://mp.weixin.qq.com/s/xxxxxxxx"
 ```
 
-> **Naming note:** the installed command is `spider-claw` (hyphen — a shell
-> command), backed by the Python package `spider_claw` (underscore — a valid
-> module name). The mapping is declared in `pyproject.toml`:
-> `spider-claw = "spider_claw:main"`. With `uv run`:
-> - `uv run spider-claw` → resolves to the installed console script;
-> - `uv run python -m spider_claw` → runs the package entry point directly.
+> **Naming note:** the installed command is `spider-claw` (hyphen — a shell command),
+> backed by the npm package `spider-claw` whose binary entry is `dist/cli.js`.
 
 ### Multi-source routing
 
@@ -77,9 +89,20 @@ Available `--source` values: `wechat`, `twitter`, `blog`.
 #### Adding a new blog site
 
 Blogs are data-driven: register a `BlogSiteConfig` in
-`spider_claw/sources/blog.py` (`BLOG_SITES`) with the domain, sitemap URL and
-selectors. No changes to the crawl flow are needed. Unknown domains still work
+[`src/sources/blog.ts`](./src/sources/blog.ts) (`BLOG_SITES`) with the domain, sitemap
+URL and selectors. No changes to the crawl flow are needed. Unknown domains still work
 with `--source blog` via a readability-based fallback.
+
+```ts
+'example.com': {
+  domain: 'example.com',
+  sitemapUrl: 'https://example.com/sitemap.xml',
+  contentSelector: 'article.post',   // or omit → <article> → readability
+  dateIsFirstH2: true,               // if the site prints the date as first <h2>
+  listPathFilter: '/blog/',          // sitemap filter (optional)
+  removeSelectors: ['script', 'style', '.ads'],
+},
+```
 
 ### Batch mode with `url-list.json`
 
@@ -105,19 +128,21 @@ a single fixed command. Crawled entries are marked and skipped on the next run.
 - An object with `status: "done"` is **skipped** on subsequent runs.
 - After each crawl the file is rewritten with `source`, `status`, `output`
   (relative path) and `updated_at`, so progress survives interruptions (resume).
-- **Deduplication**: the dedup key is `(source, article_id)`. For WeChat,
-  `article_id` is the core path (`/s/xxx`, with tracking params like
+- **Deduplication**: the dedup key is `(source, articleId)`. For WeChat,
+  `articleId` is the core path (`/s/xxx`, with tracking params like
   `?chksm=...&scene=...` and anchors stripped). The same article—even with
   different tracking parameters or listed twice—is crawled only once; extra
   occurrences print `⏭️ 重复 URL，跳过` and are skipped.
 
 ```bash
 # Default file: ./url-list.json
-uv run spider-claw
+spider-claw
 
 # Or specify a file
-uv run spider-claw --list my-urls.json
+spider-claw --list my-urls.json
 ```
+
+The process exits with code `1` if any entry failed, so it is CI-friendly.
 
 Output structure:
 
@@ -131,19 +156,50 @@ output/
         └── ...
 ```
 
+## Options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `-o, --output <dir>` | `./output` | Output directory |
+| `--list <file>` | `./url-list.json` | URL list for batch mode |
+| `--source <name>` | auto | Force a source (`wechat`/`twitter`/`blog`), overriding URL detection |
+| `--from-sitemap <sitemapUrl>` | — | Discover blog posts from a sitemap, append to `url-list.json`, and crawl (resume-safe) |
+| `--proxy` | off (direct) | Route HTTP requests through the environment proxy (`ALL_PROXY`/`HTTPS_PROXY`/`NO_PROXY`) |
+| `-V, --version` | — | Print the version |
 
 ## Testing
 
 ```bash
-# Unit tests (default CI path)
-uv run --with pytest pytest -q -m "not e2e"
+# Unit tests (offline; default CI path)
+pnpm test
 
-# Live E2E against real WeChat articles
-WECHAT_E2E_URLS="https://mp.weixin.qq.com/s/Y7dyRC7CJ09miHWU6LBzBA,https://mp.weixin.qq.com/s/xxxxxxxx" \
-  uv run --with pytest pytest -q -m e2e -s
+# Type checking and production build
+pnpm typecheck && pnpm build
+
+# Live E2E against real WeChat articles (needs network + Camoufox browser)
+WECHAT_E2E_URLS="https://mp.weixin.qq.com/s/Y7dyRC7CJ09miHWU6LBzBA" \
+  pnpm test:e2e
 ```
 
-`e2e` tests require network and browser runtime, so they run via manual GitHub Actions workflow `.github/workflows/e2e.yml`.
+`tests/e2e` self-skips when `WECHAT_E2E_URLS` is unset, so it also runs safely via the
+manual GitHub Actions workflow `.github/workflows/e2e.yml`.
+
+## Library usage
+
+Everything the CLI does is available as a typed API:
+
+```ts
+import { BlogSource, detectSource, downloadAllImages, convertToMarkdown } from 'spider-claw';
+
+const source = detectSource('https://addyosmani.com/blog/any-post/');
+if (source) {
+  const mdPath = await source.fetch('https://addyosmani.com/blog/any-post/', {
+    outputDir: './output',
+    proxy: 'direct',
+  });
+  console.log(mdPath);
+}
+```
 
 ## Use as AI Agent Skill
 
@@ -184,35 +240,45 @@ After adding the file, restart Claude Code to reload skills.
 
 > ⚠️ ClawHub install method is deprecated and no longer supported. Use [Skills CLI](#skills-cli-recommended) or Manual Install above.
 
-## PyPI Publishing (GitHub Actions)
+## Publishing (GitHub Actions)
 
-Repository: `jackwener/wechat-article-to-markdown`
-Workflow: `.github/workflows/release.yml`
-Environment: `pypi`
+Workflows (now npm-based):
 
-`release.yml` triggers on `v*` tags, runs unit tests + live e2e tests, then publishes to PyPI with trusted publishing (`id-token: write`).
+| Workflow | Trigger | Purpose |
+| --- | --- | --- |
+| `.github/workflows/ci.yml` | PR / push to `main` | typecheck → build → unit tests |
+| `.github/workflows/e2e.yml` | manual | live WeChat e2e |
+| `.github/workflows/publish.yml` | manual | verify → `npm publish` (trusted publishing + provenance) |
+| `.github/workflows/release.yml` | `v*` tag | verify → e2e → `npm publish` + GitHub Release |
 
-For release e2e targets, set repository variable `RELEASE_E2E_URLS` (comma-separated article URLs).  
-If not set, workflow falls back to `https://mp.weixin.qq.com/s/Y7dyRC7CJ09miHWU6LBzBA`.
+For release e2e targets, set repository variable `RELEASE_E2E_URLS` (comma-separated
+article URLs). If not set, the workflow falls back to
+`https://mp.weixin.qq.com/s/Y7dyRC7CJ09miHWU6LBzBA`.
 
 ---
 
 ## 功能特性
 
-- 使用 Camoufox 进行反检测抓取
+- 使用 Camoufox 进行反检测抓取（微信）
 - 提取标题、公众号名称、发布时间、原文链接
-- 将微信公众号文章 HTML 转换为 Markdown
+- 将文章 HTML 转换为 Markdown
 - 下载图片到本地 `images/` 并自动替换链接
 - 处理微信 `code-snippet` 代码块并保留语言标识
+- 站点地图批量爬取 + 列表续爬去重
+
+## 环境要求
+
+- **Node.js ≥ 22**
+- 仅微信来源需要一次性下载 Camoufox 浏览器：`npx camoufox-js fetch`
 
 ## 安装
 
 ```bash
-# 推荐：uv tool
-uv tool install spider-claw
+# 推荐：全局安装 CLI
+npm install -g spider-claw
 
-# 或者：pipx
-pipx install spider-claw
+# 或免安装直接运行
+npx spider-claw "https://mp.weixin.qq.com/s/xxxxxxxx"
 ```
 
 或从源码安装：
@@ -220,32 +286,23 @@ pipx install spider-claw
 ```bash
 git clone git@github.com:jackwener/wechat-article-to-markdown.git
 cd wechat-article-to-markdown
-uv sync
+pnpm install && pnpm build
 ```
 
 ## 使用示例
 
 ```bash
-# 安装后的全局命令（uv tool install / pipx）
+# 安装后的全局命令
 spider-claw "https://mp.weixin.qq.com/s/xxxxxxxx"
 
-# 在仓库内用 uv 运行（开发推荐）
-uv run spider-claw "https://mp.weixin.qq.com/s/xxxxxxxx"
-
-# 或通过包直接运行
-uv run python -m spider_claw "https://mp.weixin.qq.com/s/xxxxxxxx"
+# 在仓库内直接跑 TypeScript 源码（开发推荐）
+pnpm dev "https://mp.weixin.qq.com/s/xxxxxxxx"
 ```
-
-> **命名说明：** 安装的命令名为 `spider-claw`（连字符，终端命令），底层是 Python 包
-> `spider_claw`（下划线，符合模块命名）。两者在 `pyproject.toml` 中通过
-> `spider-claw = "spider_claw:main"` 关联。使用 `uv run` 时：
-> - `uv run spider-claw` → 解析为已安装的 console 脚本；
-> - `uv run python -m spider_claw` → 直接运行包入口。
 
 ### 多源路由
 
-`spider-claw` 是一个多源抓取工具。微信（`mp.weixin.qq.com`）与博客（任意已注册
-博客域名，如 `addyosmani.com`）已完整实现；Twitter 已注册为占位 stub（尚未实现）。
+微信（`mp.weixin.qq.com`）与博客（任意已注册博客域名，如 `addyosmani.com`）已完整实现；
+Twitter 已注册为占位 stub（尚未实现）。
 
 ```bash
 # 来源由 URL 自动识别：
@@ -265,9 +322,9 @@ spider-claw --from-sitemap "https://addyosmani.com/sitemap.xml"
 
 #### 新增博客站点
 
-博客采用「数据驱动」设计：在 `spider_claw/sources/blog.py` 的 `BLOG_SITES`
-注册表里加一条 `BlogSiteConfig`（域名、站点地图 URL、选择器即可），无需改动抓取
-流程。未注册的域名也可通过 `--source blog` 走 readability 通用兜底提取。
+博客采用「数据驱动」设计：在 [`src/sources/blog.ts`](./src/sources/blog.ts) 的
+`BLOG_SITES` 注册表里加一条 `BlogSiteConfig`（域名、站点地图 URL、选择器即可），
+无需改动抓取流程。未注册的域名也可通过 `--source blog` 走 readability 通用兜底提取。
 
 ### 批量模式（url-list.json）
 
@@ -286,53 +343,43 @@ spider-claw --from-sitemap "https://addyosmani.com/sitemap.xml"
 ```
 
 - 直接写字符串 `"https://..."` 视为待爬取；
-- 对象可带 `source` 字段（`wechat`/`twitter`/`blog`）；缺省时按 URL 自动识别，并最终回退 `wechat`（兼容多源支持之前的历史列表）。
+- 对象可带 `source` 字段（`wechat`/`twitter`/`blog`）；缺省时按 URL 自动识别，并最终回退 `wechat`（兼容多源支持之前的历史列表）；
 - 带 `status: "done"` 的对象下次运行会**跳过**；
-- 每条爬取后文件会被回写 `source`、`status`、`output`（相对路径）、`updated_at`，中断也可续爬。
-- **去重**：去重键为 `(source, article_id)`。微信的 `article_id` 是核心路径（`/s/xxx`，去掉 `?chksm=...&scene=...` 等追踪参数与锚点）。同一篇文章即使链接带不同追踪参数、或在列表里写了多次，也只会爬一次；多余的会打印 `⏭️ 重复 URL，跳过` 并跳过。
+- 每条爬取后文件会被回写 `source`、`status`、`output`（相对路径）、`updated_at`，中断也可续爬；
+- **去重**：去重键为 `(source, articleId)`。微信的 `articleId` 是核心路径（`/s/xxx`，去掉 `?chksm=...&scene=...` 等追踪参数与锚点）。同一篇文章即使链接带不同追踪参数、或在列表里写了多次，也只会爬一次；多余的会打印 `⏭️ 重复 URL，跳过` 并跳过；
+- 只要有一条失败，进程退出码为 `1`（方便 CI 判断）。
+
+### 命令行参数
+
+见上方 [Options](#options) 表格：`-o/--output`、`--list`、`--source`、`--from-sitemap`、`--proxy`、`-V/--version`。
+
+## 测试
 
 ```bash
-# 默认文件：./url-list.json
-uv run spider-claw
+pnpm test          # 离线单元测试（默认 CI 路径）
+pnpm typecheck     # 类型检查
+pnpm build         # 生产构建
 
-# 或指定文件
-uv run spider-claw --list my-urls.json
+# 真实微信文章 e2e（需网络 + Camoufox 浏览器）
+WECHAT_E2E_URLS="https://mp.weixin.qq.com/s/Y7dyRC7CJ09miHWU6LBzBA" pnpm test:e2e
 ```
 
 ## 作为 AI Agent Skill 使用
 
-项目自带根目录 [`SKILL.md`](./SKILL.md)（总入口 skill），以及 [`skills/`](./skills) 下按来源拆分的 skill（如 `wechat-to-markdown`），可供支持 `.agents/skills/` 约定的 Agent 自动发现。
-
-### [Skills CLI](https://github.com/vercel-labs/skills)（推荐）
+项目自带根目录 [`SKILL.md`](./SKILL.md)（总入口 skill），以及 [`skills/`](./skills)
+下按来源拆分的 skill（如 `wechat-to-markdown`），可供支持 `.agents/skills/` 约定的
+Agent 自动发现。
 
 ```bash
 npx skills add jackwener/wechat-article-to-markdown
 ```
 
-| 参数 | 说明 |
-| --- | --- |
-| `-g` | 全局安装（用户级别，跨项目共享） |
-| `-a claude-code` | 指定目标 Agent |
-| `-y` | 非交互模式 |
+## 文档
 
-### 手动安装
-
-```bash
-mkdir -p ~/.claude/skills/wechat-article-to-markdown
-curl -o ~/.claude/skills/wechat-article-to-markdown/SKILL.md \
-  https://raw.githubusercontent.com/jackwener/wechat-article-to-markdown/main/SKILL.md
-```
-
-### ~~OpenClaw / ClawHub~~（已过时）
-
-> ⚠️ ClawHub 安装方式已过时，不再支持。请使用上方的 Skills CLI 或手动安装。
-
-## 文档（设计实现 Wiki）
-
-详细的来源设计与实现说明位于 [`docs/`](./docs/)：
-
+- [TypeScript 重构报告](./docs/typescript-refactor-report.md) — 重构范围、映射表、验证结论与已知差异。
 - [微信公众号来源设计](./docs/wechat-source-design.md) — 反检测抓取（Camoufox）、URL 归一化、元数据/正文预处理、代码块与图片本地化。
 - [博客来源设计](./docs/blog-source-design.md) — 数据驱动的 `BlogSiteConfig`、站点地图批量爬取、新增站点指南，以及博客与微信的差异对比。
+- [归档的 Python 实现](./legacy/python/README.md) — 仅供对照参考，不参与构建与 CI。
 
 ## License
 

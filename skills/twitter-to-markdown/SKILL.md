@@ -17,7 +17,8 @@ tags:
 # Twitter / X → Markdown (spider-claw / twitter source — STUB)
 
 > ⚠️ **Not implemented yet.** This skill is a placeholder for the `twitter` source of
-> [`spider-claw`](../../SKILL.md). Running it currently raises `NotImplementedError`.
+> [`spider-claw`](../../SKILL.md). Running it currently fails with
+> `来源「twitter」尚未实现，敬请期待。`.
 
 ## Planned behavior
 
@@ -32,12 +33,14 @@ spider-claw --source twitter "https://twitter.com/<handle>/status/<id>"
 
 ## Current status
 
-The `twitter` source is registered in `spider_claw/sources/twitter.py` as a stub.
-Until implemented, invoking it (auto-detected or via `--source twitter`) fails with
-a clear "尚未实现" message and the batch list entry is marked `failed` accordingly.
+The `twitter` source is registered in `src/sources/twitter.ts` as a stub
+(`StubSource`). Until implemented, invoking it (auto-detected or via
+`--source twitter`) fails with a clear "尚未实现" message and the batch list entry is
+marked `failed` accordingly.
 
 ## When it will be useful
 
 When you need to archive tweets/threads as Markdown for summarization or RAG. Until
-then, use the [`wechat-to-markdown`](../wechat-to-markdown) source for WeChat, or
-implement the `TwitterSource.fetch` method.
+then, use the [`wechat-to-markdown`](../wechat-to-markdown) or
+[`blog-to-markdown`](../blog-to-markdown) source, or implement
+`TwitterSource.fetch`.
