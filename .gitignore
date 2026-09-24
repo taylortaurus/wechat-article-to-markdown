@@ -2,16 +2,38 @@ output/
 debug.html
 *.log
 .DS_Store
-__pycache__/
-*.pyc
-.venv/
-
-# Packaging / build artifacts
-*.egg-info/
 
 # IDE
 .idea/
 
 # User crawl list (contains per-URL crawl state)
 url-list.json
+
+# Node / TypeScript
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+.vitest/
+
+# Legacy Python implementation (kept for reference only)
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+
 .workbuddy/
+references/
+
+# P0 探针产物：含 token / Cookie 与原始响应，绝不入库
+scripts/probe/out/
+
+# dsh 插件的构建产物（由 pnpm build 生成，不入库）
+packages/*/lib/
+
+# dsh 插件在本机生成的凭据（含 token / Cookie）与界面配置 —— 绝不入库
+.dsh-wechat-mp/
+
+# 本地工具状态
+.omc/
